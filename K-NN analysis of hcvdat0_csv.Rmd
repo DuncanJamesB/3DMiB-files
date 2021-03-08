@@ -1,0 +1,116 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+# Business understanding
+This data set contains laboratory values of blood donors and Hepatitis C patients. As well as demographic values like age. The full data set contains 615 observations and 14 variables.
+
+<b>The most important variable in this dataset is 'diagnosis'. This column tells us whether the patient's blood contains the Hepatitis C- virus. This virus initially causes a direct infection to the liver. In about 80% of cases this virus develops into a chronic liver infection (an infection lasting longer than 6 months). Hepatitis C includes the categories Hepatitis, Fibrosis and Cirrhosis. Fibrosis occurs when the healthy tissue of your liver becomes scarred and can therefore not work as well. Cirrhosis is what we name the final stage of fibrosis, in which the liver is so scarred to the extent that it could cause liver failure.</b>
+
+To remedy Hepatitis C, people can donate blood. This blood must be free of the Hepatitis C- virus, otherwise it can not be donated.
+
+# Data understanding
+## Loading data + loading packages + including normalise function
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(googlesheets4)
+library(class)
+library(caret)
+library(readr)
+
+normalize <- {function(x)
+  return ((x-min(x))/(max(x)-min(x)))}
+
+url <- "https://raw.githubusercontent.com/HAN-M3DM-Data-Mining/assignments/master/datasets/KNN-hcvdat0.csv"
+rawDF <- read_csv(url)
+str(rawDF)
+```
+## Testing normalise function
+```{r}
+testSet1 <- c(1:5)
+testSet2 <- c(1:5) * 10
+
+cat("testSet1:", testSet1, "\n")
+
+cat("testSet2:", testSet2, "\n")
+
+cat("Normalized testSet1:", normalize(testSet1), "\n")
+
+cat("Normalized testSet2:", normalize(testSet2))
+```
+
+# Data preparation/ cleaning the data
+```{r}
+cleanDF <- rawDF[-1] %>% na.omit
+head(cleanDF, 10)
+
+set.seed(42)
+rows <- sample(nrow(cleanDF))
+cleanDF <- cleanDF[rows, ]
+```
+## Counting values & proportions
+```{r}
+cntDiag <- table(cleanDF$Category)
+propDiag <- round(prop.table(cntDiag)*100, digits = 1)
+
+cntDiag
+propDiag
+```
+## Factoring "Category" character
+```{r}
+cleanDF$Category <- cleanDF$Category %>% factor
+
+cleanDF$Category <- fct_collapse(cleanDF$Category, Donor = c("0=Blood Donor"), SuspectDonor = c("0s=Suspect Blood Donor"), HepatitisC = c("1=Hepatitis", "2=Fibrosis", "3=Cirrhosis"))
+levels(cleanDF$Category)
+
+summary(cleanDF[c("ALB", "ALP", "ALT", "AST")])
+```
+
+## Applying normalise function to each feature in dataset
+```{r}
+nCols <- dim(cleanDF)[2]
+cleanDF_n <- sapply(4:nCols,
+                    function(x) {normalize(cleanDF[,x])
+}) %>% as.data.frame()
+
+summary(cleanDF_n)
+```
+## Training & test set
+```{r}
+trainDF_feat <- cleanDF_n[1:489,  ]
+testDF_feat <- cleanDF_n[490:589,  ]
+
+trainDF_labels <- cleanDF[1:489,  1]
+testDF_labels <- cleanDF[490:589,  1]
+```
+# Modeling
+```{r}
+library(class)
+cleanDF_test_pred <- knn(train = as.matrix(trainDF_feat), test = as.matrix(testDF_feat), cl = as.matrix(trainDF_labels), k = 10)
+
+head(cleanDF_test_pred)
+```
+```{r}
+library(caret)
+
+confusionMatrix(cleanDF_test_pred, testDF_labels[[1]], positive = NULL, dnn = c("Prediction", "True"))
+```
+# Evaluation
+
+The model predicts whether blood has the Hepatitis C- virus with an accuracy of 97%.  
+
+Naturally, you would want 100% accuracy when it comes to blood donors that have the Hepatitis-C virus. Sadly, this model scores relatively low here. As the Sensitivity for our HepatitisC class scores 0.60. Meaning a lot of false negatives, potentially infecting more people by transfusing infected blood.
+
+<b>I believe the dataset contains too little donors with HepatitisC for the model to become better at predicting.</b>
+
+
+```{r}
+#Errors to be found by reviewer:
+#* Line 48: has to include `>%> na.omit` to clean data of na values
+#* Line 93: no testing set is included in the K-NN models. Reviewer should add `test = as.matrix(testDF_feat)
+```
+
